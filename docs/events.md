@@ -15,7 +15,7 @@ Notes:
 
 | Event name | Topic(s) | Data (shape & types) | When emitted |
 |---|---:|---|---|
-| StreamCreated | ["created", stream_id] | deposit_amount: i128 | When a stream is successfully created (after tokens transferred). The `stream_id` is the newly assigned stream id (u64). The event is published in `persist_new_stream`.
+| StreamCreated | ["created", stream_id] | StreamCreated { stream_id: u64, sender: Address, recipient: Address, deposit_amount: i128, rate_per_second: i128, start_time: u64, cliff_time: u64, end_time: u64 } | When a stream is successfully created (after tokens transferred). The `stream_id` is the newly assigned stream id (u64). The event is published in `persist_new_stream`. Not emitted on failed creation (e.g., `StartTimeInPast`).
 | Withdrawal | ["withdrew", stream_id] | withdraw_amount: i128 | When a recipient successfully withdraws accrued tokens. Only emitted when amount > 0.
 | StreamPaused | ["paused", stream_id] | StreamEvent::Paused(stream_id) — enum wrapper containing the u64 stream id | When a stream is paused by the sender or admin.
 | StreamResumed | ["resumed", stream_id] | StreamEvent::Resumed(stream_id) — enum wrapper containing the u64 stream id | When a paused stream is resumed by the sender or admin.
@@ -35,13 +35,30 @@ field names and types the contract publishes.
 ### 1) StreamCreated
 
 - topics: ["created", <stream_id>]  // stream_id: u64
-- data: <deposit_amount>             // i128
+- data: StreamCreated struct:
+  - stream_id: u64
+  - sender: Address
+  - recipient: Address
+  - deposit_amount: i128
+  - rate_per_second: i128
+  - start_time: u64
+  - cliff_time: u64
+  - end_time: u64
 
 Example JSON (illustrative):
 
 {
   "topics": ["created", 0],
-  "data": 1000
+  "data": {
+    "stream_id": 0,
+    "sender": "G...SENDER...",
+    "recipient": "G...RECIPIENT...",
+    "deposit_amount": 1000,
+    "rate_per_second": 1,
+    "start_time": 0,
+    "cliff_time": 0,
+    "end_time": 1000
+  }
 }
 
 In Soroban test snapshots the raw event object appears as:
@@ -49,7 +66,16 @@ In Soroban test snapshots the raw event object appears as:
 {
   "event": {
     "topics": ["created", 0],
-    "data": 1000
+    "data": {
+      "stream_id": 0,
+      "sender": "G...SENDER...",
+      "recipient": "G...RECIPIENT...",
+      "deposit_amount": 1000,
+      "rate_per_second": 1,
+      "start_time": 0,
+      "cliff_time": 0,
+      "end_time": 1000
+    }
   }
 }
 

@@ -58,6 +58,8 @@ pub enum ContractError {
     InvalidParams = 3,
     /// Global emergency pause is active; stream creation is blocked.
     ContractPaused = 4,
+    /// Start time is before the current ledger timestamp.
+    StartTimeInPast = 5,
 }
 
 #[contracttype]
@@ -387,6 +389,7 @@ fn push_token(env: &Env, to: &Address, amount: i128) {
 impl FluxoraStream {
     #[allow(clippy::too_many_arguments)]
     fn validate_stream_params(
+        env: &Env,
         sender: &Address,
         recipient: &Address,
         deposit_amount: i128,
@@ -408,10 +411,9 @@ impl FluxoraStream {
 
         // Validate time constraints
         assert!(start_time < end_time, "start_time must be before end_time");
-        assert!(
-            start_time >= current_ledger_timestamp,
-            "start_time must not be in the past"
-        );
+        if start_time < current_ledger_timestamp {
+            panic_with_error!(env, ContractError::StartTimeInPast);
+        }
         assert!(
             cliff_time >= start_time && cliff_time <= end_time,
             "cliff_time must be within [start_time, end_time]"
@@ -553,6 +555,7 @@ impl FluxoraStream {
     ///
     /// # Panics
     /// - If `start_time` is before the current ledger timestamp (past start time)
+    ///   - Uses `ContractError::StartTimeInPast` (structured error for integrators)
     /// - If `deposit_amount` or `rate_per_second` is not positive
     /// - If `sender` and `recipient` are the same address
     /// - If `start_time >= end_time` (invalid time range)
@@ -613,6 +616,7 @@ impl FluxoraStream {
         }
 
         Self::validate_stream_params(
+            &env,
             &sender,
             &recipient,
             deposit_amount,
@@ -670,6 +674,7 @@ impl FluxoraStream {
         // First pass: validate all streams and calculate total deposit required
         for params in streams.iter() {
             Self::validate_stream_params(
+                &env,
                 &sender,
                 &params.recipient,
                 params.deposit_amount,

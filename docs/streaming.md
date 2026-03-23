@@ -73,7 +73,7 @@ sequenceDiagram
     Contract ->> Token: transfer(sender → contract, deposit_amount)
     Token -->> Contract: OK
     Contract -->> Sender: stream_id
-    Note right of Contract: Event: ("created", stream_id) → deposit_amount
+    Note right of Contract: Event: ("created", stream_id) → StreamCreated
 
     Note over Sender, Recipient: 2. Cliff Period (no withdrawals)
 
@@ -194,6 +194,13 @@ At creation:
 deposit_amount >= rate_per_second * (end_time - start_time)
 ```
 
+### Start Time Boundary (Creation)
+
+- `start_time` **must be >= current ledger timestamp** at creation time.
+- `start_time == now` is valid ("start now").
+- `start_time < now` is rejected with `ContractError::StartTimeInPast`.
+- Failure is atomic: no stream is persisted, no tokens move, and no `created` event is emitted.
+
 **Limits Policy (Defense in Depth):**
 
 - No arbitrary hard-coded caps (e.g. "max 1M tokens").
@@ -267,7 +274,7 @@ Emitted when a recipient successfully withdraws tokens via `withdraw`.
 
 | Topic                      | Payload                                  | When Emitted                               |
 | -------------------------- | ---------------------------------------- | ------------------------------------------ |
-| `("created", stream_id)`   | `deposit_amount` (i128)                  | `create_stream`                            |
+| `("created", stream_id)`   | `StreamCreated` (struct payload)         | `create_stream`                            |
 | `("paused", stream_id)`    | `StreamEvent::Paused(stream_id)`         | `pause_stream` / `pause_stream_as_admin`   |
 | `("resumed", stream_id)`   | `StreamEvent::Resumed(stream_id)`        | `resume_stream` / `resume_stream_as_admin` |
 | `("cancelled", stream_id)` | `StreamEvent::Cancelled(stream_id)`      | `cancel_stream` / `cancel_stream_as_admin` |
@@ -277,9 +284,12 @@ Emitted when a recipient successfully withdraws tokens via `withdraw`.
 
 ---
 
-## 6. Error Codes (Panic Messages)
+## 6. Error Behavior (ContractError + Panics)
 
-All failures use `panic!` / `assert!`. No custom error enum.
+Errors are surfaced either as `ContractError` variants or as panic/assert messages.
+Integrators should treat `ContractError` as stable error codes, and panic strings
+as best-effort diagnostics. The table below focuses on creation and lifecycle
+errors relevant to stream creation and timing.
 
 | Message                                                                 | Function                                   | Trigger                      |
 | ----------------------------------------------------------------------- | ------------------------------------------ | ---------------------------- |
@@ -291,6 +301,7 @@ All failures use `panic!` / `assert!`. No custom error enum.
 | `"cliff_time must be within [start_time, end_time]"`                    | `create_stream`                            | cliff out of range           |
 | `"deposit_amount must cover total streamable amount (rate * duration)"` | `create_stream`                            | underfunded                  |
 | `"overflow calculating total streamable amount"`                        | `create_stream`                            | overflow in rate \* duration |
+| `ContractError::StartTimeInPast`                                        | `create_stream` / `create_streams`         | start_time < ledger timestamp |
 | `"stream not found"`                                                    | Various                                    | Invalid stream_id            |
 | `"stream is already paused"`                                            | `pause_stream`                             | Double pause                 |
 | `"stream must be active to pause"`                                      | `pause_stream`                             | Pause non-active stream      |

@@ -5,6 +5,7 @@ This table lists all possible errors in the FluxoraStream contract, including bo
 | Error Code / Panic Message                       | Description                                                                 | Functions Returning It |
 |-------------------------------------------------|-----------------------------------------------------------------------------|----------------------|
 | `StreamNotFound`                                | The specified stream does not exist                                          | `pause_stream`, `resume_stream`, `cancel_stream`, `withdraw`, `calculate_accrued`, `get_stream_state`, `cancel_stream_as_admin`, `pause_stream_as_admin`, `resume_stream_as_admin` |
+| `StartTimeInPast`                               | `start_time` is before the current ledger timestamp; creation rejected        | `create_stream`, `create_streams` |
 | `deposit_amount must be positive`               | Deposit amount must be greater than zero                                     | `create_stream` |
 | `rate_per_second must be positive`              | Stream rate must be greater than zero                                        | `create_stream` |
 | `sender and recipient must be different`       | Sender cannot stream to themselves                                           | `create_stream` |

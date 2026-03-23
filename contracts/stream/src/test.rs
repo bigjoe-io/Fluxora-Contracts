@@ -4,10 +4,13 @@ extern crate std;
 use soroban_sdk::{
     testutils::{Address as _, Events, Ledger},
     token::{Client as TokenClient, StellarAssetClient},
-    Address, Env, FromVal, IntoVal, Symbol, TryFromVal, Vec,
+    Address, Env, Error, FromVal, IntoVal, Symbol, TryFromVal, Vec,
 };
 
-use crate::{CreateStreamParams, FluxoraStream, FluxoraStreamClient, StreamEvent, StreamStatus};
+use crate::{
+    ContractError, CreateStreamParams, FluxoraStream, FluxoraStreamClient, StreamEvent,
+    StreamStatus,
+};
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -7373,13 +7376,12 @@ fn test_new_admin_can_perform_admin_ops() {
 // Tests — Issue #108: start_time must not be in the past
 // ---------------------------------------------------------------------------
 
-/// start_time strictly before current ledger time must panic.
+/// start_time strictly before current ledger time must fail with StartTimeInPast.
 #[test]
-#[should_panic(expected = "start_time must not be in the past")]
 fn test_create_stream_start_time_in_past_panics() {
     let ctx = TestContext::setup();
     ctx.env.ledger().set_timestamp(1000);
-    ctx.client().create_stream(
+    let result = ctx.client().try_create_stream(
         &ctx.sender,
         &ctx.recipient,
         &1000_i128,
@@ -7388,15 +7390,20 @@ fn test_create_stream_start_time_in_past_panics() {
         &999u64,
         &1999u64,
     );
+    assert_eq!(
+        result,
+        Err(Ok(Error::from_contract_error(
+            ContractError::StartTimeInPast as u32
+        )))
+    );
 }
 
 /// start_time one second before now is rejected (boundary).
 #[test]
-#[should_panic(expected = "start_time must not be in the past")]
 fn test_create_stream_start_time_one_second_before_now_panics() {
     let ctx = TestContext::setup();
     ctx.env.ledger().set_timestamp(500);
-    ctx.client().create_stream(
+    let result = ctx.client().try_create_stream(
         &ctx.sender,
         &ctx.recipient,
         &1000_i128,
@@ -7405,15 +7412,20 @@ fn test_create_stream_start_time_one_second_before_now_panics() {
         &499u64,
         &1499u64,
     );
+    assert_eq!(
+        result,
+        Err(Ok(Error::from_contract_error(
+            ContractError::StartTimeInPast as u32
+        )))
+    );
 }
 
 /// start_time far in the past is rejected.
 #[test]
-#[should_panic(expected = "start_time must not be in the past")]
 fn test_create_stream_start_time_far_in_past_panics() {
     let ctx = TestContext::setup();
     ctx.env.ledger().set_timestamp(10_000);
-    ctx.client().create_stream(
+    let result = ctx.client().try_create_stream(
         &ctx.sender,
         &ctx.recipient,
         &1000_i128,
@@ -7421,6 +7433,12 @@ fn test_create_stream_start_time_far_in_past_panics() {
         &0u64, // start far in the past
         &0u64,
         &1000u64,
+    );
+    assert_eq!(
+        result,
+        Err(Ok(Error::from_contract_error(
+            ContractError::StartTimeInPast as u32
+        )))
     );
 }
 
@@ -7511,32 +7529,23 @@ fn test_create_stream_past_start_no_token_transfer() {
     ctx.env.ledger().set_timestamp(1000);
 
     let sender_balance_before = ctx.token().balance(&ctx.sender);
+    let stream_count_before = ctx.client().get_stream_count();
+    let events_before = ctx.env.events().all().len();
 
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        ctx.client().create_stream(
-            &ctx.sender,
-            &ctx.recipient,
-            &1000_i128,
-            &1_i128,
-            &500u64, // past
-            &500u64,
-            &1500u64,
-        );
-    }));
-
-    assert!(result.is_err(), "should have panicked");
-    let err = result.unwrap_err();
-    let msg = err
-        .downcast_ref::<&str>()
-        .copied()
-        .or_else(|| {
-            err.downcast_ref::<std::string::String>()
-                .map(|s| s.as_str())
-        })
-        .unwrap_or("");
-    assert!(
-        msg.contains("start_time must not be in the past"),
-        "wrong panic: {msg}"
+    let result = ctx.client().try_create_stream(
+        &ctx.sender,
+        &ctx.recipient,
+        &1000_i128,
+        &1_i128,
+        &500u64, // past
+        &500u64,
+        &1500u64,
+    );
+    assert_eq!(
+        result,
+        Err(Ok(Error::from_contract_error(
+            ContractError::StartTimeInPast as u32
+        )))
     );
 
     // Sender balance must be unchanged — no token was transferred
@@ -7544,6 +7553,16 @@ fn test_create_stream_past_start_no_token_transfer() {
         ctx.token().balance(&ctx.sender),
         sender_balance_before,
         "sender balance must not change on validation failure"
+    );
+    assert_eq!(
+        ctx.client().get_stream_count(),
+        stream_count_before,
+        "stream counter must not change on validation failure"
+    );
+    assert_eq!(
+        ctx.env.events().all().len(),
+        events_before,
+        "no events should be emitted on validation failure"
     );
 }
 
