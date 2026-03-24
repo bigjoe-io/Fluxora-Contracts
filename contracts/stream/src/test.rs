@@ -8857,6 +8857,8 @@ fn test_withdraw_and_withdraw_to_interleaved_no_double_pay() {
     let state = ctx.client().get_stream_state(&stream_id);
     assert_eq!(state.withdrawn_amount, 1000);
     assert_eq!(state.status, StreamStatus::Completed);
+}
+
 // Tests — Issue #252: create_stream deposit, rate, and schedule validation matrix
 // ---------------------------------------------------------------------------
 
