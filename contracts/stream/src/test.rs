@@ -10257,6 +10257,35 @@ fn test_extend_end_time_cancelled_stream_rejected() {
     ctx.client().extend_stream_end_time(&stream_id, &2000u64);
 }
 
+/// Stream created at t=0 with cliff at t=0 (no cliff): index is updated immediately.
+#[test]
+fn test_get_recipient_streams_no_cliff_indexed_at_creation() {
+    let ctx = TestContext::setup();
+    ctx.env.ledger().set_timestamp(0);
+    let id = ctx.client().create_stream(
+        &ctx.sender,
+        &ctx.recipient,
+        &1000_i128,
+        &1_i128,
+        &0u64,
+        &0u64,
+        &1000u64,
+    );
+
+    // Index must reflect the stream before any time passes.
+    let streams = ctx.client().get_recipient_streams(&ctx.recipient);
+    assert_eq!(streams.len(), 1);
+    assert_eq!(streams.get(0).unwrap(), id);
+}
+
+/// Stream with cliff: index is populated at creation, not at cliff time.
+/// The index tracks existence, not withdrawability.
+#[test]
+fn test_get_recipient_streams_cliff_stream_indexed_before_cliff() {
+    let ctx = TestContext::setup();
+    ctx.env.ledger().set_timestamp(0);
+    let id = ctx.create_cliff_stream(); // cliff at t=500
+
     // Before cliff: stream is in index even though nothing is withdrawable yet.
     let streams = ctx.client().get_recipient_streams(&ctx.recipient);
     assert_eq!(streams.len(), 1);
