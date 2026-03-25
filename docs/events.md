@@ -6,6 +6,7 @@ as the canonical source of truth for indexers and backend parsers. The schemas
 below are derived directly from the contract source `contracts/stream/src/lib.rs`.
 
 Notes:
+
 - Soroban events contain an ordered list of topics and a single `data` payload.
 - Topics shown below are the literal values used in `env.events().publish(...)`.
 - Types use the contract's Rust types (e.g. `u64`, `i128`, `Address`).
@@ -13,31 +14,32 @@ Notes:
 
 ## Event list
 
-| Event name       | Topic(s)                        | Data (shape & types)                                                                                                                                      | When emitted                                                                                                            |
-|------------------|---------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------|
-| StreamCreated    | `["created", stream_id: u64]`   | `StreamCreated { stream_id: u64, sender: Address, recipient: Address, deposit_amount: i128, rate_per_second: i128, start_time: u64, cliff_time: u64, end_time: u64 }` | After a stream is successfully created and deposit tokens transferred. Not emitted on any validation failure.           |
-| Withdrawal       | `["withdrew", stream_id: u64]`  | `Withdrawal { stream_id: u64, recipient: Address, amount: i128 }`                                                                                         | When a recipient successfully withdraws accrued tokens. Only emitted when `amount > 0`.                                |
-| WithdrawalTo     | `["wdraw_to", stream_id: u64]`  | `WithdrawalTo { stream_id: u64, recipient: Address, destination: Address, amount: i128 }`                                                                 | When a recipient calls `withdraw_to` and `amount > 0`. Destination may differ from recipient.                          |
-| StreamPaused     | `["paused", stream_id: u64]`    | `StreamEvent::Paused(stream_id: u64)`                                                                                                                     | When a stream is paused by the sender (`pause_stream`) or admin (`pause_stream_as_admin`).                              |
-| StreamResumed    | `["resumed", stream_id: u64]`   | `StreamEvent::Resumed(stream_id: u64)`                                                                                                                    | When a paused stream is resumed by the sender (`resume_stream`) or admin (`resume_stream_as_admin`).                    |
-| StreamCancelled  | `["cancelled", stream_id: u64]` | `StreamEvent::StreamCancelled(stream_id: u64)`                                                                                                            | When a stream is cancelled by the sender (`cancel_stream`) or admin (`cancel_stream_as_admin`). `status` is persisted as `Cancelled` and `cancelled_at` is set before this event is emitted. |
-| StreamCompleted  | `["completed", stream_id: u64]` | `StreamEvent::StreamCompleted(stream_id: u64)`                                                                                                            | When `withdrawn_amount` reaches `deposit_amount` during a `withdraw` or `batch_withdraw` call. Emitted after Withdrawal. |
-| StreamClosed     | `["closed", stream_id: u64]`    | `StreamEvent::StreamClosed(stream_id: u64)`                                                                                                               | When a completed stream's storage is removed via `close_completed_stream`. Emitted before the storage entry is deleted.  |
-| RateUpdated      | `["rate_upd", stream_id: u64]`  | `RateUpdated { stream_id: u64, old_rate_per_second: i128, new_rate_per_second: i128, effective_time: u64 }`                                               | When `update_rate_per_second` successfully changes a stream's rate.                                                     |
-| StreamEndShortened | `["end_shrt", stream_id: u64]` | `StreamEndShortened { stream_id: u64, old_end_time: u64, new_end_time: u64, refund_amount: i128 }`                                                       | When `shorten_stream_end_time` successfully shortens a stream.                                                           |
-| StreamEndExtended | `["end_ext", stream_id: u64]`  | `StreamEndExtended { stream_id: u64, old_end_time: u64, new_end_time: u64 }`                                                                              | When `extend_stream_end_time` successfully extends a stream.                                                             |
-| StreamToppedUp   | `["top_up", stream_id: u64]`    | `StreamToppedUp { stream_id: u64, top_up_amount: i128, new_deposit_amount: i128 }`                                                                        | When `top_up_stream` successfully increases a stream's deposit.                                                          |
-| AdminUpdated     | `["AdminUpdated"]`              | `(old_admin: Address, new_admin: Address)`                                                                                                                | When the contract admin is rotated via `set_admin`.                                                                     |
+| Event name         | Topic(s)                        | Data (shape & types)                                                                                                                                                  | When emitted                                                                                                                                                                                 |
+| ------------------ | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| StreamCreated      | `["created", stream_id: u64]`   | `StreamCreated { stream_id: u64, sender: Address, recipient: Address, deposit_amount: i128, rate_per_second: i128, start_time: u64, cliff_time: u64, end_time: u64 }` | After a stream is successfully created and deposit tokens transferred. Not emitted on any validation failure.                                                                                |
+| Withdrawal         | `["withdrew", stream_id: u64]`  | `Withdrawal { stream_id: u64, recipient: Address, amount: i128 }`                                                                                                     | When a recipient successfully withdraws accrued tokens. Only emitted when `amount > 0`.                                                                                                      |
+| WithdrawalTo       | `["wdraw_to", stream_id: u64]`  | `WithdrawalTo { stream_id: u64, recipient: Address, destination: Address, amount: i128 }`                                                                             | When a recipient calls `withdraw_to` and `amount > 0`. Destination may differ from recipient.                                                                                                |
+| StreamPaused       | `["paused", stream_id: u64]`    | `StreamEvent::Paused(stream_id: u64)`                                                                                                                                 | When a stream is paused by the sender (`pause_stream`) or admin (`pause_stream_as_admin`).                                                                                                   |
+| StreamResumed      | `["resumed", stream_id: u64]`   | `StreamEvent::Resumed(stream_id: u64)`                                                                                                                                | When a paused stream is resumed by the sender (`resume_stream`) or admin (`resume_stream_as_admin`).                                                                                         |
+| StreamCancelled    | `["cancelled", stream_id: u64]` | `StreamEvent::StreamCancelled(stream_id: u64)`                                                                                                                        | When a stream is cancelled by the sender (`cancel_stream`) or admin (`cancel_stream_as_admin`). `status` is persisted as `Cancelled` and `cancelled_at` is set before this event is emitted. |
+| StreamCompleted    | `["completed", stream_id: u64]` | `StreamEvent::StreamCompleted(stream_id: u64)`                                                                                                                        | When `withdrawn_amount` reaches `deposit_amount` during a `withdraw` or `batch_withdraw` call. Emitted after Withdrawal.                                                                     |
+| StreamClosed       | `["closed", stream_id: u64]`    | `StreamEvent::StreamClosed(stream_id: u64)`                                                                                                                           | When a completed stream's storage is removed via `close_completed_stream`. Emitted before the storage entry is deleted.                                                                      |
+| RateUpdated        | `["rate_upd", stream_id: u64]`  | `RateUpdated { stream_id: u64, old_rate_per_second: i128, new_rate_per_second: i128, effective_time: u64 }`                                                           | When `update_rate_per_second` successfully changes a stream's rate.                                                                                                                          |
+| StreamEndShortened | `["end_shrt", stream_id: u64]`  | `StreamEndShortened { stream_id: u64, old_end_time: u64, new_end_time: u64, refund_amount: i128 }`                                                                    | When `shorten_stream_end_time` successfully shortens a stream.                                                                                                                               |
+| StreamEndExtended  | `["end_ext", stream_id: u64]`   | `StreamEndExtended { stream_id: u64, old_end_time: u64, new_end_time: u64 }`                                                                                          | When `extend_stream_end_time` successfully extends a stream.                                                                                                                                 |
+| StreamToppedUp     | `["top_up", stream_id: u64]`    | `StreamToppedUp { stream_id: u64, top_up_amount: i128, new_deposit_amount: i128 }`                                                                                    | When `top_up_stream` successfully increases a stream's deposit.                                                                                                                              |
+| AdminUpdated       | `["AdminUpd"]`                  | `(old_admin: Address, new_admin: Address)`                                                                                                                            | When the contract admin is rotated via `set_admin`.                                                                                                                                          |
 
 ---
-| Event name | Topic(s) | Data (shape & types) | When emitted |
-|---|---:|---|---|
-| StreamCreated | ["created", stream_id] | StreamCreated { stream_id: u64, sender: Address, recipient: Address, deposit_amount: i128, rate_per_second: i128, start_time: u64, cliff_time: u64, end_time: u64 } | When a stream is successfully created (after tokens transferred). The `stream_id` is the newly assigned stream id (u64). The event is published in `persist_new_stream`. Not emitted on failed creation (e.g., `StartTimeInPast`).
-| Withdrawal | ["withdrew", stream_id] | Withdrawal { stream_id: u64, recipient: Address, amount: i128 } | When a recipient successfully withdraws accrued tokens. Only emitted when amount > 0.
-| StreamPaused | ["paused", stream_id] | StreamEvent::Paused(stream_id) — enum wrapper containing the u64 stream id | When a stream is paused by the sender or admin.
-| StreamResumed | ["resumed", stream_id] | StreamEvent::Resumed(stream_id) — enum wrapper containing the u64 stream id | When a paused stream is resumed by the sender or admin.
-| StreamCancelled | ["cancelled", stream_id] | StreamEvent::StreamCancelled(stream_id) — enum wrapper containing the u64 stream id | When a stream is cancelled by the sender or admin.
-| AdminUpdated | ["admin", "updated"] | (old_admin: Address, new_admin: Address) | When contract admin is rotated via `set_admin`.
+
+| Event name      |                 Topic(s) | Data (shape & types)                                                                                                                                                | When emitted                                                                                                                                                                                                                       |
+| --------------- | -----------------------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| StreamCreated   |   ["created", stream_id] | StreamCreated { stream_id: u64, sender: Address, recipient: Address, deposit_amount: i128, rate_per_second: i128, start_time: u64, cliff_time: u64, end_time: u64 } | When a stream is successfully created (after tokens transferred). The `stream_id` is the newly assigned stream id (u64). The event is published in `persist_new_stream`. Not emitted on failed creation (e.g., `StartTimeInPast`). |
+| Withdrawal      |  ["withdrew", stream_id] | Withdrawal { stream_id: u64, recipient: Address, amount: i128 }                                                                                                     | When a recipient successfully withdraws accrued tokens. Only emitted when amount > 0.                                                                                                                                              |
+| StreamPaused    |    ["paused", stream_id] | StreamEvent::Paused(stream_id) — enum wrapper containing the u64 stream id                                                                                          | When a stream is paused by the sender or admin.                                                                                                                                                                                    |
+| StreamResumed   |   ["resumed", stream_id] | StreamEvent::Resumed(stream_id) — enum wrapper containing the u64 stream id                                                                                         | When a paused stream is resumed by the sender or admin.                                                                                                                                                                            |
+| StreamCancelled | ["cancelled", stream_id] | StreamEvent::StreamCancelled(stream_id) — enum wrapper containing the u64 stream id                                                                                 | When a stream is cancelled by the sender or admin.                                                                                                                                                                                 |
+| AdminUpdated    |             ["AdminUpd"] | (old_admin: Address, new_admin: Address)                                                                                                                            | When contract admin is rotated via `set_admin`.                                                                                                                                                                                    |
 
 ## Exact Soroban event structure
 
@@ -135,13 +137,13 @@ pub enum StreamEvent {
 }
 ```
 
-| Function(s)                                  | Topic          | Data enum variant              |
-|----------------------------------------------|----------------|--------------------------------|
-| `pause_stream`, `pause_stream_as_admin`      | `"paused"`     | `StreamEvent::Paused(id)`      |
-| `resume_stream`, `resume_stream_as_admin`    | `"resumed"`    | `StreamEvent::Resumed(id)`     |
-| `cancel_stream`, `cancel_stream_as_admin`    | `"cancelled"`  | `StreamEvent::StreamCancelled(id)` |
-| `withdraw`, `batch_withdraw` (final drain on Active streams) | `"completed"`  | `StreamEvent::StreamCompleted(id)` |
-| `close_completed_stream`                     | `"closed"`     | `StreamEvent::StreamClosed(id)` |
+| Function(s)                                                  | Topic         | Data enum variant                  |
+| ------------------------------------------------------------ | ------------- | ---------------------------------- |
+| `pause_stream`, `pause_stream_as_admin`                      | `"paused"`    | `StreamEvent::Paused(id)`          |
+| `resume_stream`, `resume_stream_as_admin`                    | `"resumed"`   | `StreamEvent::Resumed(id)`         |
+| `cancel_stream`, `cancel_stream_as_admin`                    | `"cancelled"` | `StreamEvent::StreamCancelled(id)` |
+| `withdraw`, `batch_withdraw` (final drain on Active streams) | `"completed"` | `StreamEvent::StreamCompleted(id)` |
+| `close_completed_stream`                                     | `"closed"`    | `StreamEvent::StreamClosed(id)`    |
 
 Example (cancelled):
 
@@ -264,22 +266,23 @@ If you change event topics or payloads in the contract, please update this
 document to match and include example snapshots.
 
 ---
+
 Commit message suggestion: `docs: add event schema and topics for indexers`
-| Source location                                              | Symbol emitted  |
+| Source location | Symbol emitted |
 |--------------------------------------------------------------|-----------------|
-| `persist_new_stream`                                         | `"created"`     |
-| `withdraw`, `batch_withdraw`                                 | `"withdrew"`    |
-| `withdraw_to`                                                | `"wdraw_to"`    |
-| `withdraw`, `batch_withdraw` (completion)                    | `"completed"`   |
-| `pause_stream`, `pause_stream_as_admin`                      | `"paused"`      |
-| `resume_stream`, `resume_stream_as_admin`                    | `"resumed"`     |
-| `cancel_stream`, `cancel_stream_as_admin`                    | `"cancelled"`   |
-| `close_completed_stream`                                     | `"closed"`      |
-| `update_rate_per_second`                                     | `"rate_upd"`    |
-| `shorten_stream_end_time`                                    | `"end_shrt"`    |
-| `extend_stream_end_time`                                     | `"end_ext"`     |
-| `top_up_stream`                                              | `"top_up"`      |
-| `set_admin`                                                  | `"AdminUpdated"`|
+| `persist_new_stream` | `"created"` |
+| `withdraw`, `batch_withdraw` | `"withdrew"` |
+| `withdraw_to` | `"wdraw_to"` |
+| `withdraw`, `batch_withdraw` (completion) | `"completed"` |
+| `pause_stream`, `pause_stream_as_admin` | `"paused"` |
+| `resume_stream`, `resume_stream_as_admin` | `"resumed"` |
+| `cancel_stream`, `cancel_stream_as_admin` | `"cancelled"` |
+| `close_completed_stream` | `"closed"` |
+| `update_rate_per_second` | `"rate_upd"` |
+| `shorten_stream_end_time` | `"end_shrt"` |
+| `extend_stream_end_time` | `"end_ext"` |
+| `top_up_stream` | `"top_up"` |
+| `set_admin` | `"AdminUpdated"`|
 
 If you change event topics or payloads in the contract, update this document and
 include updated example snapshots in the PR.
