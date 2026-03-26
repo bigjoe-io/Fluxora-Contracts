@@ -2839,3 +2839,85 @@ fn integration_create_streams_single_token_pull_equals_sum() {
     assert_eq!(ctx.token.balance(&ctx.sender), sender_before - 3500);
     assert_eq!(ctx.token.balance(&ctx.contract_id), 3500);
 }
+
+// ===========================================================================
+// CONTRACT_VERSION policy — integration tests
+//
+// Scope: observable guarantees of version() across the full contract stack.
+// ===========================================================================
+
+/// version() returns 1 on an initialised contract.
+#[test]
+fn contract_version_returns_one_after_init() {
+    let ctx = TestContext::setup();
+    assert_eq!(ctx.client().version(), 1);
+}
+
+/// version() returns 1 before init (compile-time constant, no storage read).
+#[test]
+fn contract_version_readable_before_init() {
+    let env = Env::default();
+    let contract_id = env.register_contract(None, FluxoraStream);
+    let client = FluxoraStreamClient::new(&env, &contract_id);
+    assert_eq!(client.version(), 1);
+}
+
+/// version() is stable — same value before and after creating a stream.
+#[test]
+fn contract_version_stable_across_create_stream() {
+    let ctx = TestContext::setup();
+    let v_before = ctx.client().version();
+    ctx.env.ledger().set_timestamp(0);
+    ctx.client().create_stream(
+        &ctx.sender, &ctx.recipient, &1000, &1, &0, &0, &1000,
+    );
+    assert_eq!(ctx.client().version(), v_before);
+}
+
+/// version() is stable across withdraw → Completed transition.
+#[test]
+fn contract_version_stable_across_withdraw_to_completed() {
+    let ctx = TestContext::setup();
+    ctx.env.ledger().set_timestamp(0);
+    let stream_id = ctx.client().create_stream(
+        &ctx.sender, &ctx.recipient, &1000, &1, &0, &0, &1000,
+    );
+    ctx.env.ledger().set_timestamp(1000);
+    ctx.client().withdraw(&stream_id);
+    assert_eq!(
+        ctx.client().get_stream_state(&stream_id).status,
+        StreamStatus::Completed
+    );
+    assert_eq!(ctx.client().version(), 1, "version unchanged after completion");
+}
+
+/// version() is stable across cancel.
+#[test]
+fn contract_version_stable_across_cancel() {
+    let ctx = TestContext::setup();
+    ctx.env.ledger().set_timestamp(0);
+    let stream_id = ctx.client().create_stream(
+        &ctx.sender, &ctx.recipient, &1000, &1, &0, &0, &1000,
+    );
+    ctx.env.ledger().set_timestamp(500);
+    ctx.client().cancel_stream(&stream_id);
+    assert_eq!(ctx.client().version(), 1, "version unchanged after cancel");
+}
+
+/// version() is stable across global pause/unpause.
+#[test]
+fn contract_version_stable_across_pause_unpause() {
+    let ctx = TestContext::setup();
+    ctx.client().set_contract_paused(&true);
+    assert_eq!(ctx.client().version(), 1);
+    ctx.client().set_contract_paused(&false);
+    assert_eq!(ctx.client().version(), 1);
+}
+
+/// version() requires no authorization — callable by any address.
+#[test]
+fn contract_version_requires_no_auth() {
+    // setup_strict uses no mock_all_auths; version() must still work
+    let ctx = TestContext::setup_strict();
+    assert_eq!(ctx.client().version(), 1);
+}

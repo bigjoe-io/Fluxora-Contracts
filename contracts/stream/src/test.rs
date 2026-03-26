@@ -2130,7 +2130,7 @@ fn test_calculate_accrued_permissionless_access() {
     let stream_id = ctx.create_default_stream();
 
     // Create a random third-party address (not sender, not recipient, not admin)
-    let third_party = Address::random(&ctx.env);
+    let _third_party = Address::generate(&ctx.env);
 
     // Third party must be able to call calculate_accrued without auth
     // This would panic if auth was required
@@ -9371,14 +9371,15 @@ fn test_update_rate_per_second_emits_event() {
 
     // Verify event was emitted.
     let events = ctx.env.events().all();
-    let rate_update_events: Vec<_> = events
+    let rate_update_events: std::vec::Vec<_> = events
         .iter()
         .filter(|e| {
-            if let Ok(topics) = <(Symbol, u64)>::try_from_val(&ctx.env, &e.topics) {
-                topics.0 == Symbol::new(&ctx.env, "rate_upd") && topics.1 == stream_id
-            } else {
-                false
-            }
+            if e.0 != ctx.contract_id { return false; }
+            let topics = &e.1;
+            if topics.len() < 2 { return false; }
+            let t0 = Symbol::from_val(&ctx.env, &topics.get(0).unwrap());
+            let t1: u64 = topics.get(1).unwrap().into_val(&ctx.env);
+            t0 == Symbol::new(&ctx.env, "rate_upd") && t1 == stream_id
         })
         .collect();
 
@@ -14447,3 +14448,116 @@ fn test_create_streams_batch_deposit_overflow_is_atomic() {
         "stream count must not change on overflow failure"
     );
 }
+
+// ===========================================================================
+// CONTRACT_VERSION policy tests
+//
+// Scope: every observable guarantee of the version() entry-point and the
+// CONTRACT_VERSION constant, as documented in the versioning policy.
+//
+// Audit notes / residual risks:
+// - There is no on-chain enforcement that CONTRACT_VERSION is incremented on
+//   breaking changes. The tests here verify the current value and availability
+//   guarantees; the increment discipline is enforced by code review and CI.
+// - version() is a compile-time constant; it cannot be changed without
+//   redeploying the contract. This is intentional.
+// ===========================================================================
+#[cfg(test)]
+mod contract_version_policy {
+    use super::*;
+    use soroban_sdk::Env;
+
+    /// version() returns CONTRACT_VERSION (currently 1).
+    #[test]
+    fn version_returns_current_constant() {
+        let ctx = TestContext::setup();
+        assert_eq!(ctx.client().version(), crate::CONTRACT_VERSION);
+        assert_eq!(ctx.client().version(), 1);
+    }
+
+    /// version() works before init — no config dependency.
+    #[test]
+    fn version_works_before_init() {
+        let env = Env::default();
+        let contract_id = env.register_contract(None, FluxoraStream);
+        let client = FluxoraStreamClient::new(&env, &contract_id);
+        assert_eq!(client.version(), 1, "version must be readable before init");
+    }
+
+    /// version() is idempotent — repeated calls return the same value.
+    #[test]
+    fn version_is_idempotent() {
+        let ctx = TestContext::setup();
+        let v1 = ctx.client().version();
+        let v2 = ctx.client().version();
+        assert_eq!(v1, v2);
+    }
+
+    /// version() does not mutate any state.
+    #[test]
+    fn version_does_not_mutate_state() {
+        let ctx = TestContext::setup();
+        let count_before = ctx.client().get_stream_count();
+        ctx.client().version();
+        ctx.client().version();
+        assert_eq!(ctx.client().get_stream_count(), count_before);
+    }
+
+    /// version() requires no authorization (strict mode — no mock_all_auths).
+    #[test]
+    fn version_requires_no_authorization() {
+        let ctx = TestContext::setup_strict();
+        let v = ctx.client().version();
+        assert_eq!(v, 1);
+    }
+
+    /// version() is stable across stream lifecycle operations.
+    /// Creating, pausing, cancelling streams must not affect the version.
+    #[test]
+    fn version_stable_across_stream_lifecycle() {
+        let ctx = TestContext::setup();
+        assert_eq!(ctx.client().version(), 1);
+
+        let stream_id = ctx.create_default_stream();
+        assert_eq!(ctx.client().version(), 1, "unchanged after create");
+
+        ctx.env.ledger().set_timestamp(100);
+        ctx.client().pause_stream(&stream_id);
+        assert_eq!(ctx.client().version(), 1, "unchanged after pause");
+
+        ctx.client().resume_stream(&stream_id);
+        assert_eq!(ctx.client().version(), 1, "unchanged after resume");
+
+        ctx.env.ledger().set_timestamp(500);
+        ctx.client().cancel_stream(&stream_id);
+        assert_eq!(ctx.client().version(), 1, "unchanged after cancel");
+    }
+
+    /// version() is stable after a failed re-init attempt.
+    #[test]
+    fn version_stable_after_failed_reinit() {
+        let ctx = TestContext::setup();
+        let _ = ctx.client().try_init(&ctx.token_id, &ctx.admin);
+        assert_eq!(ctx.client().version(), 1);
+    }
+
+    /// CONTRACT_VERSION constant value matches version() return value.
+    /// Guards against the constant and the function getting out of sync.
+    #[test]
+    fn constant_matches_function_return() {
+        let ctx = TestContext::setup();
+        assert_eq!(
+            ctx.client().version(),
+            crate::CONTRACT_VERSION,
+            "version() must equal CONTRACT_VERSION constant"
+        );
+    }
+
+    /// version() is a u32 — must be non-zero (version 0 is reserved/invalid).
+    #[test]
+    fn version_is_nonzero() {
+        let ctx = TestContext::setup();
+        assert!(ctx.client().version() > 0, "version must be > 0");
+    }
+
+} // mod contract_version_policy
