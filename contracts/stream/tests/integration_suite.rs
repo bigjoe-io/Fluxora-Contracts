@@ -1914,7 +1914,10 @@ fn integration_create_streams_batch_overflow_protection() {
     // when errors are defined in the enum.
     let result = ctx.client().try_create_streams(&ctx.sender, &streams);
 
-    assert_eq!(result, Err(Ok(fluxora_stream::ContractError::ArithmeticOverflow)));
+    assert_eq!(
+        result,
+        Err(Ok(fluxora_stream::ContractError::ArithmeticOverflow))
+    );
 
     // Verify atomicity: no tokens moved
     assert_eq!(ctx.token.balance(&ctx.sender), 10_000);
