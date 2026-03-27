@@ -4208,7 +4208,10 @@ fn test_admin_pause_emits_same_event_as_sender_pause() {
     );
     // Topic[1] must be the stream_id
     let topic_id: u64 = last_event.1.get(1).unwrap().into_val(&ctx.env);
-    assert_eq!(topic_id, stream_id, "pause_stream_as_admin topic[1] must be stream_id");
+    assert_eq!(
+        topic_id, stream_id,
+        "pause_stream_as_admin topic[1] must be stream_id"
+    );
     // Data must be StreamEvent::Paused(stream_id)
     assert_eq!(
         Option::<StreamEvent>::from_val(&ctx.env, &last_event.2).unwrap(),
@@ -4236,7 +4239,10 @@ fn test_admin_resume_emits_same_event_as_sender_resume() {
         "resume_stream_as_admin topic[0] must be \"resumed\""
     );
     let topic_id: u64 = last_event.1.get(1).unwrap().into_val(&ctx.env);
-    assert_eq!(topic_id, stream_id, "resume_stream_as_admin topic[1] must be stream_id");
+    assert_eq!(
+        topic_id, stream_id,
+        "resume_stream_as_admin topic[1] must be stream_id"
+    );
     assert_eq!(
         Option::<StreamEvent>::from_val(&ctx.env, &last_event.2).unwrap(),
         StreamEvent::Resumed(stream_id),
@@ -4263,7 +4269,10 @@ fn test_admin_cancel_emits_same_event_as_sender_cancel() {
         "cancel_stream_as_admin topic[0] must be \"cancelled\""
     );
     let topic_id: u64 = last_event.1.get(1).unwrap().into_val(&ctx.env);
-    assert_eq!(topic_id, stream_id, "cancel_stream_as_admin topic[1] must be stream_id");
+    assert_eq!(
+        topic_id, stream_id,
+        "cancel_stream_as_admin topic[1] must be stream_id"
+    );
     assert_eq!(
         Option::<StreamEvent>::from_val(&ctx.env, &last_event.2).unwrap(),
         StreamEvent::StreamCancelled(stream_id),
@@ -4289,7 +4298,10 @@ fn test_set_contract_paused_emits_ct_pause_event() {
     );
     let payload = ContractPauseChanged::try_from_val(&ctx.env, &last_event.2)
         .expect("ct_pause data must be ContractPauseChanged");
-    assert!(payload.paused, "ContractPauseChanged.paused must be true on pause");
+    assert!(
+        payload.paused,
+        "ContractPauseChanged.paused must be true on pause"
+    );
 
     // Unpause: paused = false
     ctx.client().set_contract_paused(&false);
@@ -4303,7 +4315,10 @@ fn test_set_contract_paused_emits_ct_pause_event() {
     );
     let payload = ContractPauseChanged::try_from_val(&ctx.env, &last_event.2)
         .expect("ct_pause data must be ContractPauseChanged on unpause");
-    assert!(!payload.paused, "ContractPauseChanged.paused must be false on unpause");
+    assert!(
+        !payload.paused,
+        "ContractPauseChanged.paused must be false on unpause"
+    );
 }
 
 /// `set_global_emergency_paused` must emit topic ("gl_pause",) with
@@ -4324,7 +4339,10 @@ fn test_set_global_emergency_paused_emits_gl_pause_event() {
     );
     let payload = GlobalEmergencyPauseChanged::try_from_val(&ctx.env, &last_event.2)
         .expect("gl_pause data must be GlobalEmergencyPauseChanged");
-    assert!(payload.paused, "GlobalEmergencyPauseChanged.paused must be true on pause");
+    assert!(
+        payload.paused,
+        "GlobalEmergencyPauseChanged.paused must be true on pause"
+    );
 
     // Clear emergency pause
     ctx.client().set_global_emergency_paused(&false);
@@ -4338,7 +4356,10 @@ fn test_set_global_emergency_paused_emits_gl_pause_event() {
     );
     let payload = GlobalEmergencyPauseChanged::try_from_val(&ctx.env, &last_event.2)
         .expect("gl_pause data must be GlobalEmergencyPauseChanged on clear");
-    assert!(!payload.paused, "GlobalEmergencyPauseChanged.paused must be false on clear");
+    assert!(
+        !payload.paused,
+        "GlobalEmergencyPauseChanged.paused must be false on clear"
+    );
 }
 
 /// When set_global_emergency_paused is true, user mutations (withdraw, cancel) are
@@ -4354,7 +4375,10 @@ fn test_admin_ops_emit_events_during_global_emergency_pause() {
 
     // User withdraw is blocked
     let result = ctx.client().try_withdraw(&stream_id);
-    assert!(result.is_err(), "withdraw must be blocked during global emergency pause");
+    assert!(
+        result.is_err(),
+        "withdraw must be blocked during global emergency pause"
+    );
 
     // Admin pause still works and emits the correct event
     ctx.client().pause_stream_as_admin(&stream_id);

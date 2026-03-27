@@ -1537,8 +1537,10 @@ impl FluxoraStream {
             .set(&DataKey::GlobalPaused, &paused);
         bump_instance_ttl(&env);
 
-        env.events()
-            .publish((symbol_short!("ct_pause"),), ContractPauseChanged { paused });
+        env.events().publish(
+            (symbol_short!("ct_pause"),),
+            ContractPauseChanged { paused },
+        );
 
         Ok(())
     }

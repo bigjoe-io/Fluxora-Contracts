@@ -2858,18 +2858,27 @@ fn integration_global_emergency_pause_blocks_user_mutations() {
 
     // withdraw is blocked
     let result = ctx.client().try_withdraw(&stream_id);
-    assert!(result.is_err(), "withdraw must be blocked during emergency pause");
+    assert!(
+        result.is_err(),
+        "withdraw must be blocked during emergency pause"
+    );
 
     // cancel_stream (sender path) is blocked
     let result = ctx.client().try_cancel_stream(&stream_id);
-    assert!(result.is_err(), "cancel_stream must be blocked during emergency pause");
+    assert!(
+        result.is_err(),
+        "cancel_stream must be blocked during emergency pause"
+    );
 
     // create_stream is blocked
     ctx.env.ledger().set_timestamp(0);
-    let result = ctx.client().try_create_stream(
-        &ctx.sender, &ctx.recipient, &1000, &1, &0, &0, &1000,
+    let result =
+        ctx.client()
+            .try_create_stream(&ctx.sender, &ctx.recipient, &1000, &1, &0, &0, &1000);
+    assert!(
+        result.is_err(),
+        "create_stream must be blocked during emergency pause"
     );
-    assert!(result.is_err(), "create_stream must be blocked during emergency pause");
 
     // Clear emergency pause — mutations resume
     ctx.client().set_global_emergency_paused(&false);
@@ -2877,7 +2886,10 @@ fn integration_global_emergency_pause_blocks_user_mutations() {
 
     ctx.env.ledger().set_timestamp(500);
     let amount = ctx.client().withdraw(&stream_id);
-    assert_eq!(amount, 500, "withdraw must succeed after emergency pause is cleared");
+    assert_eq!(
+        amount, 500,
+        "withdraw must succeed after emergency pause is cleared"
+    );
 }
 
 /// Admin overrides work and emit correctly-shaped events while emergency pause is active.
