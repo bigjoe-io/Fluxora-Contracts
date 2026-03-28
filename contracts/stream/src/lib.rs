@@ -1782,7 +1782,6 @@ impl FluxoraStream {
         Ok(())
     }
 
-
     /// Retrieve the complete state of a payment stream.
     ///
     /// Returns all stored information about a stream including participants, amounts,

@@ -77,7 +77,15 @@ impl<'a> Ctx<'a> {
         StellarAssetClient::new(&env, &token_id).mint(&sender, &10_000_i128);
 
         let token = soroban_sdk::token::Client::new(&env, &token_id);
-        Self { env, contract_id, token_id, admin, sender, recipient, token }
+        Self {
+            env,
+            contract_id,
+            token_id,
+            admin,
+            sender,
+            recipient,
+            token,
+        }
     }
 
     fn client(&self) -> FluxoraStreamClient<'_> {
@@ -107,12 +115,7 @@ impl<'a> Ctx<'a> {
                 sub_invokes: &[MockAuthInvoke {
                     contract: &self.token_id,
                     fn_name: "transfer",
-                    args: (
-                        &self.sender,
-                        &self.contract_id,
-                        &1000_i128,
-                    )
-                        .into_val(&self.env),
+                    args: (&self.sender, &self.contract_id, &1000_i128).into_val(&self.env),
                     sub_invokes: &[],
                 }],
             },
@@ -198,9 +201,17 @@ fn adversarial_create_stream_stranger_cannot_impersonate_sender() {
     }));
 
     assert!(result.is_err(), "stranger must not create stream as sender");
-    assert_eq!(ctx.client().get_stream_count(), count_before, "counter must not advance");
+    assert_eq!(
+        ctx.client().get_stream_count(),
+        count_before,
+        "counter must not advance"
+    );
     assert_eq!(ctx.total_supply(), supply_before, "no tokens must move");
-    assert_eq!(ctx.env.events().all().len(), events_before, "no events emitted");
+    assert_eq!(
+        ctx.env.events().all().len(),
+        events_before,
+        "no events emitted"
+    );
 }
 
 // ===========================================================================
@@ -233,7 +244,10 @@ fn adversarial_pause_stream_stranger_rejected_no_side_effects() {
     }));
 
     assert!(result.is_err(), "stranger must not pause stream");
-    assert_eq!(ctx.client().get_stream_state(&stream_id).status, state_before.status);
+    assert_eq!(
+        ctx.client().get_stream_state(&stream_id).status,
+        state_before.status
+    );
     assert_eq!(ctx.total_supply(), supply_before);
     assert_eq!(ctx.env.events().all().len(), events_before);
 }
@@ -444,7 +458,10 @@ fn adversarial_cancel_stream_admin_cannot_use_sender_path() {
         ctx.client().cancel_stream(&stream_id);
     }));
 
-    assert!(result.is_err(), "admin must not use sender-only cancel path");
+    assert!(
+        result.is_err(),
+        "admin must not use sender-only cancel path"
+    );
     assert_eq!(
         ctx.client().get_stream_state(&stream_id).status,
         StreamStatus::Active
@@ -545,7 +562,10 @@ fn adversarial_withdraw_admin_rejected_no_side_effects() {
         ctx.client().withdraw(&stream_id);
     }));
 
-    assert!(result.is_err(), "admin must not withdraw via recipient path");
+    assert!(
+        result.is_err(),
+        "admin must not withdraw via recipient path"
+    );
     assert_eq!(
         ctx.client().get_stream_state(&stream_id).withdrawn_amount,
         0
@@ -972,8 +992,14 @@ fn adversarial_set_admin_stranger_rejected_config_unchanged() {
 
     assert!(result.is_err(), "stranger must not rotate admin");
     let config_after = ctx.client().get_config();
-    assert_eq!(config_after.admin, config_before.admin, "admin must be unchanged");
-    assert_eq!(config_after.token, config_before.token, "token must be unchanged");
+    assert_eq!(
+        config_after.admin, config_before.admin,
+        "admin must be unchanged"
+    );
+    assert_eq!(
+        config_after.token, config_before.token,
+        "token must be unchanged"
+    );
     assert_eq!(ctx.env.events().all().len(), events_before);
 }
 
@@ -1105,7 +1131,10 @@ fn adversarial_set_contract_paused_stranger_rejected() {
         &0u64,
         &1000u64,
     );
-    assert_eq!(ctx.client().get_stream_state(&id).status, StreamStatus::Active);
+    assert_eq!(
+        ctx.client().get_stream_state(&id).status,
+        StreamStatus::Active
+    );
 }
 
 /// The stream sender cannot set the global pause flag.
