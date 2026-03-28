@@ -2,13 +2,13 @@ extern crate std;
 
 use fluxora_stream::{
     ContractError, ContractPauseChanged, CreateStreamParams, FluxoraStream, FluxoraStreamClient,
-    GlobalEmergencyPauseChanged, StreamEvent, StreamStatus,
+    GlobalEmergencyPauseChanged, StreamEndShortened, StreamEvent, StreamStatus, StreamToppedUp,
 };
 use soroban_sdk::log;
 use soroban_sdk::{
     testutils::{Address as _, Events, Ledger},
     token::{Client as TokenClient, StellarAssetClient},
-    vec, Address, Env, FromVal, IntoVal, TryFromVal,
+    vec, Address, Env, FromVal, IntoVal, Symbol, TryFromVal,
 };
 
 struct TestContext<'a> {
