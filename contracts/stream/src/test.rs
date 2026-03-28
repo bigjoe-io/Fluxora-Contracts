@@ -3528,6 +3528,309 @@ fn test_close_completed_stream_second_close_panics() {
     );
 }
 
+// COMPREHENSIVE EDGE CASE TESTS FOR close_completed_stream
+
+#[test]
+#[should_panic]
+fn test_close_completed_stream_rejects_paused() {
+    let ctx = TestContext::setup();
+    let stream_id = ctx.create_default_stream();
+
+    // Pause the stream
+    ctx.env.ledger().set_timestamp(500);
+    ctx.client().pause_stream(&stream_id);
+
+    // Try to close paused stream (should fail with InvalidState)
+    ctx.client().close_completed_stream(&stream_id);
+}
+
+#[test]
+#[should_panic]
+fn test_close_completed_stream_rejects_nonexistent() {
+    let ctx = TestContext::setup();
+
+    // Try to close a stream that doesn't exist (should fail with StreamNotFound)
+    ctx.client().close_completed_stream(&999u64);
+}
+
+#[test]
+fn test_close_completed_stream_emits_correct_event_topic() {
+    let ctx = TestContext::setup();
+    let stream_id = ctx.create_default_stream();
+
+    ctx.env.ledger().set_timestamp(1000);
+    ctx.client().withdraw(&stream_id);
+
+    // Clear events before close
+    let _ = ctx.env.events().all();
+
+    ctx.client().close_completed_stream(&stream_id);
+
+    let events = ctx.env.events().all();
+    assert!(!events.is_empty(), "StreamClosed event must be emitted");
+
+    // Verify the event contains the correct stream_id
+    // The event structure is: (symbol_short!("closed"), stream_id) -> StreamEvent::StreamClosed(stream_id)
+    let found = events.iter().any(|e| {
+        let topics = e.topics.clone();
+        topics.len() >= 2
+            && topics
+                .get(1)
+                .map(|t| t.clone().try_from_val(&ctx.env) == Ok(stream_id))
+                .unwrap_or(false)
+    });
+    assert!(
+        found,
+        "event must contain correct stream_id in topic (index 1)"
+    );
+}
+
+#[test]
+fn test_close_completed_stream_multiple_streams_closes_correct_one() {
+    let ctx = TestContext::setup();
+    ctx.env.ledger().set_timestamp(0);
+
+    // Create three streams for the same recipient
+    let id0 = ctx.client().create_stream(
+        &ctx.sender,
+        &ctx.recipient,
+        &1000_i128,
+        &1_i128,
+        &0u64,
+        &0u64,
+        &1000u64,
+    );
+
+    let id1 = ctx.client().create_stream(
+        &ctx.sender,
+        &ctx.recipient,
+        &2000_i128,
+        &1_i128,
+        &0u64,
+        &0u64,
+        &2000u64,
+    );
+
+    let id2 = ctx.client().create_stream(
+        &ctx.sender,
+        &ctx.recipient,
+        &500_i128,
+        &1_i128,
+        &0u64,
+        &0u64,
+        &500u64,
+    );
+
+    // Complete all three streams
+    ctx.env.ledger().set_timestamp(2000);
+    ctx.client().withdraw(&id0);
+    ctx.client().withdraw(&id1);
+    ctx.client().withdraw(&id2);
+
+    // Verify all are in recipient's index
+    let streams = ctx.client().get_recipient_streams(&ctx.recipient);
+    assert_eq!(streams.len(), 3);
+
+    // Close only the middle stream (id1)
+    ctx.client().close_completed_stream(&id1);
+
+    // Verify only id1 is removed
+    let streams = ctx.client().get_recipient_streams(&ctx.recipient);
+    assert_eq!(streams.len(), 2);
+    assert_eq!(streams.get(0).unwrap(), id0);
+    assert_eq!(streams.get(1).unwrap(), id2);
+
+    // Verify remaining streams are still queryable
+    let state0 = ctx.client().get_stream_state(&id0);
+    assert_eq!(state0.status, StreamStatus::Completed);
+
+    let state2 = ctx.client().get_stream_state(&id2);
+    assert_eq!(state2.status, StreamStatus::Completed);
+
+    // Verify removed stream is not queryable
+    let result = ctx.client().try_get_stream_state(&id1);
+    assert!(result.is_err(), "closed stream must not be queryable");
+}
+
+#[test]
+fn test_close_completed_stream_permissionless_access() {
+    let ctx = TestContext::setup();
+    let stream_id = ctx.create_default_stream();
+
+    ctx.env.ledger().set_timestamp(1000);
+    ctx.client().withdraw(&stream_id);
+
+    // Any caller (including non-owner) should be able to close
+    // This test demonstrates permissionless cleanup semantics
+    ctx.client().close_completed_stream(&stream_id);
+
+    let result = ctx.client().try_get_stream_state(&stream_id);
+    assert!(result.is_err(), "stream must be closed");
+}
+
+#[test]
+fn test_close_completed_stream_recipient_index_sorted_after_close() {
+    let ctx = TestContext::setup();
+    ctx.env.ledger().set_timestamp(0);
+
+    // Create streams: 0, 1, 2, 3, 4
+    for _ in 0..5 {
+        ctx.client().create_stream(
+            &ctx.sender,
+            &ctx.recipient,
+            &100_i128,
+            &1_i128,
+            &0u64,
+            &0u64,
+            &100u64,
+        );
+    }
+
+    let streams = ctx.client().get_recipient_streams(&ctx.recipient);
+    assert_eq!(streams.len(), 5);
+
+    // Complete and close stream 2 (middle)
+    ctx.env.ledger().set_timestamp(100);
+    ctx.client().withdraw(&2u64);
+    ctx.client().close_completed_stream(&2u64);
+
+    // Verify remaining streams are still sorted
+    let streams = ctx.client().get_recipient_streams(&ctx.recipient);
+    assert_eq!(streams.len(), 4);
+    assert_eq!(streams.get(0).unwrap(), 0);
+    assert_eq!(streams.get(1).unwrap(), 1);
+    assert_eq!(streams.get(2).unwrap(), 3);
+    assert_eq!(streams.get(3).unwrap(), 4);
+
+    // Close stream 0 (first)
+    ctx.client().close_completed_stream(&0u64);
+
+    let streams = ctx.client().get_recipient_streams(&ctx.recipient);
+    assert_eq!(streams.len(), 3);
+    assert_eq!(streams.get(0).unwrap(), 1);
+    assert_eq!(streams.get(1).unwrap(), 3);
+    assert_eq!(streams.get(2).unwrap(), 4);
+
+    // Close stream 4 (last)
+    ctx.client().close_completed_stream(&4u64);
+
+    let streams = ctx.client().get_recipient_streams(&ctx.recipient);
+    assert_eq!(streams.len(), 2);
+    assert_eq!(streams.get(0).unwrap(), 1);
+    assert_eq!(streams.get(1).unwrap(), 3);
+}
+
+#[test]
+fn test_close_completed_stream_after_cliff_passed() {
+    let ctx = TestContext::setup();
+    ctx.env.ledger().set_timestamp(0);
+
+    // Create stream with cliff at t=500
+    let stream_id = ctx.client().create_stream(
+        &ctx.sender,
+        &ctx.recipient,
+        &1000_i128,
+        &1_i128,
+        &0u64,
+        &500u64, // cliff at 500
+        &1000u64,
+    );
+
+    // Advance past cliff and end time
+    ctx.env.ledger().set_timestamp(1000);
+    ctx.client().withdraw(&stream_id);
+
+    // Verify stream is completed
+    let state = ctx.client().get_stream_state(&stream_id);
+    assert_eq!(state.status, StreamStatus::Completed);
+
+    // Close should succeed
+    ctx.client().close_completed_stream(&stream_id);
+
+    let result = ctx.client().try_get_stream_state(&stream_id);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_close_completed_stream_count_decreases() {
+    let ctx = TestContext::setup();
+    ctx.env.ledger().set_timestamp(0);
+
+    // Create three streams
+    for _ in 0..3 {
+        ctx.client().create_stream(
+            &ctx.sender,
+            &ctx.recipient,
+            &100_i128,
+            &1_i128,
+            &0u64,
+            &0u64,
+            &100u64,
+        );
+    }
+
+    assert_eq!(ctx.client().get_recipient_stream_count(&ctx.recipient), 3);
+
+    // Complete and close one
+    ctx.env.ledger().set_timestamp(100);
+    ctx.client().withdraw(&0u64);
+    ctx.client().close_completed_stream(&0u64);
+
+    assert_eq!(ctx.client().get_recipient_stream_count(&ctx.recipient), 2);
+
+    // Complete and close another
+    ctx.client().withdraw(&1u64);
+    ctx.client().close_completed_stream(&1u64);
+
+    assert_eq!(ctx.client().get_recipient_stream_count(&ctx.recipient), 1);
+}
+
+#[test]
+fn test_close_completed_stream_different_recipients_independent() {
+    let ctx = TestContext::setup();
+    ctx.env.ledger().set_timestamp(0);
+
+    let recipient2 = Address::generate(&ctx.env);
+
+    // Create stream for ctx.recipient
+    let id_r1 = ctx.client().create_stream(
+        &ctx.sender,
+        &ctx.recipient,
+        &100_i128,
+        &1_i128,
+        &0u64,
+        &0u64,
+        &100u64,
+    );
+
+    // Create stream for recipient2
+    let id_r2 = ctx.client().create_stream(
+        &ctx.sender,
+        &recipient2,
+        &100_i128,
+        &1_i128,
+        &0u64,
+        &0u64,
+        &100u64,
+    );
+
+    assert_eq!(ctx.client().get_recipient_stream_count(&ctx.recipient), 1);
+    assert_eq!(ctx.client().get_recipient_stream_count(&recipient2), 1);
+
+    // Complete and close stream for ctx.recipient
+    ctx.env.ledger().set_timestamp(100);
+    ctx.client().withdraw(&id_r1);
+    ctx.client().close_completed_stream(&id_r1);
+
+    // Verify ctx.recipient's index is updated
+    assert_eq!(ctx.client().get_recipient_stream_count(&ctx.recipient), 0);
+
+    // Verify recipient2's index is unchanged
+    assert_eq!(ctx.client().get_recipient_stream_count(&recipient2), 1);
+    let streams = ctx.client().get_recipient_streams(&recipient2);
+    assert_eq!(streams.get(0).unwrap(), id_r2);
+}
+
 // ---------------------------------------------------------------------------
 // Tests — top_up_stream
 // ---------------------------------------------------------------------------
