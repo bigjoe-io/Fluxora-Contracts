@@ -2386,6 +2386,57 @@ impl FluxoraStream {
 
         Ok(())
     }
+
+    pub fn update_rate(
+    env: Env,
+    stream_id: u64,
+    new_rate_per_second: i128,
+    caller: Address,
+) -> Result<(), ContractError> {
+    // Authorization
+    caller.require_auth();
+
+    // Load stream
+    let mut stream = load_stream(&env, stream_id)?;
+
+    // Reject terminal states
+    if stream.status == StreamStatus::Completed || stream.status == StreamStatus::Cancelled {
+        return Err(ContractError::StreamTerminalState);
+    }
+
+    // Only sender or admin can update rate
+    let admin = get_admin(&env)?;
+    if caller != stream.sender && caller != admin {
+        return Err(ContractError::Unauthorized);
+    }
+
+    // Validate new rate
+    if new_rate_per_second <= 0 {
+        return Err(ContractError::InvalidParams);
+    }
+
+    let old_rate = stream.rate_per_second;
+
+    // 🔑 IMPORTANT: Do NOT touch withdrawn_amount
+    // This preserves correctness after partial withdrawals
+    stream.rate_per_second = new_rate_per_second;
+
+    // Save updated stream
+    save_stream(&env, &stream);
+
+    // Emit event
+    env.events().publish(
+        (symbol_short!("rate_upd"), stream_id),
+        RateUpdated {
+            stream_id,
+            old_rate_per_second: old_rate,
+            new_rate_per_second,
+            effective_time: env.ledger().timestamp(),
+        },
+    );
+
+    Ok(())
+}
 }
 
 #[contractimpl]
