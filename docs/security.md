@@ -324,3 +324,50 @@ git commit -m "chore: update wasm checksums"
 - **Optimized WASM**: The Stellar CLI `optimize` step may produce non-deterministic output. The reference checksum covers only the raw (unoptimized) WASM.
 - **Cross-host builds**: The pinned `wasm32-unknown-unknown` target is deterministic across hosts, but minor differences in host libc or linker could theoretically affect non-WASM builds.
 - **Dependency supply chain**: A compromised transitive dependency could alter WASM output. The `Cargo.lock` pin and checksum verification detect this at CI time.
+
+
+## Accrual Fuzz Harness (#292)
+
+Property-based tests for `calculate_accrued_amount` live in the `accrual_fuzz` module
+inside `contracts/stream/src/accrual.rs`. They use the `proptest` crate to generate
+arbitrary inputs and verify six mathematical invariants on every run.
+
+### Fuzzing strategy
+
+The harness generates random `(start_time, cliff_time, end_time, rate_per_second,
+deposit_amount, current_time)` tuples via `proptest` strategies and asserts:
+
+| # | Property | Assertion |
+|---|---|---|
+| 1 | **Boundedness** | `0 <= accrued <= deposit_amount` for all inputs |
+| 2 | **Zero before cliff** | `accrued == 0` when `current_time < cliff_time` |
+| 3 | **Monotonicity** | `accrued(t) <= accrued(t+1)` for all `t` |
+| 4 | **Saturation** | `accrued == deposit` for all `t >= end_time` when `rate*(end-start) >= deposit` |
+| 5 | **Determinism** | Same inputs always produce the same output |
+| 6 | **Overflow safety** | No panic on any `i128`/`u64` combination, including `i128::MAX` rate and `u64::MAX` time |
+
+### Edge cases targeted
+
+- `rate_per_second = i128::MAX` with `elapsed_seconds = 2` → `checked_mul` overflows → returns `deposit_amount` (safe fallback)
+- `current_time = u64::MAX` with any schedule → capped at `end_time` via `min(current_time, end_time)`
+- `cliff_time > end_time` (degenerate schedule) → `current_time < cliff_time` always true → returns 0
+- `deposit_amount = 0` → result is always 0 (bounded by deposit)
+- `rate_per_second < 0` → returns 0 (negative rate guard)
+
+### Running the harness
+
+```bash
+cargo test -p fluxora_stream accrual_fuzz
+```
+
+`proptest` runs 256 cases per property by default. To increase coverage:
+
+```bash
+PROPTEST_CASES=10000 cargo test -p fluxora_stream accrual_fuzz
+```
+
+### Found/fixed edge cases
+
+No new bugs were found during initial harness development. The existing overflow
+fallback (`None => deposit_amount` in `checked_mul`) was confirmed correct by
+`prop_no_panic_on_extreme_inputs` and `prop_bounded_by_deposit`.
